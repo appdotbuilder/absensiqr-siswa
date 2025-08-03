@@ -1,94 +1,290 @@
 
+import { db } from '../db';
+import { studentsTable, usersTable } from '../db/schema';
 import { type CreateStudentInput, type UpdateStudentInput, type Student, type CsvImportResult } from '../schema';
+import { eq, and } from 'drizzle-orm';
+
+// Generate QR code based on NISN
+function generateQrCode(nisn: string): string {
+  return `QR_${nisn}_${Date.now()}`;
+}
 
 export async function createStudent(input: CreateStudentInput): Promise<Student> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to create a new student with generated QR code.
-    // Should generate unique QR code based on NISN, check NISN uniqueness, and persist to database.
-    return Promise.resolve({
-        id: 1,
+  try {
+    // Check if NISN already exists
+    const existingStudent = await db.select()
+      .from(studentsTable)
+      .where(eq(studentsTable.nisn, input.nisn))
+      .execute();
+
+    if (existingStudent.length > 0) {
+      throw new Error('Student with this NISN already exists');
+    }
+
+    // If user_id is provided, verify the user exists
+    if (input.user_id) {
+      const user = await db.select()
+        .from(usersTable)
+        .where(eq(usersTable.id, input.user_id))
+        .execute();
+
+      if (user.length === 0) {
+        throw new Error('Referenced user does not exist');
+      }
+    }
+
+    // Generate unique QR code
+    const qrCode = generateQrCode(input.nisn);
+
+    // Insert student record
+    const result = await db.insert(studentsTable)
+      .values({
         nisn: input.nisn,
         name: input.name,
         class: input.class,
-        qr_code: `QR_${input.nisn}`,
-        user_id: input.user_id,
-        is_active: true,
-        created_at: new Date(),
-        updated_at: new Date()
-    });
+        qr_code: qrCode,
+        user_id: input.user_id
+      })
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Student creation failed:', error);
+    throw error;
+  }
 }
 
 export async function updateStudent(input: UpdateStudentInput): Promise<Student> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to update existing student information.
-    // Should validate student exists, regenerate QR code if NISN changed, and update database.
-    return Promise.resolve({
-        id: input.id,
-        nisn: input.nisn || 'existing-nisn',
-        name: input.name || 'Student Name',
-        class: input.class || 'Class A',
-        qr_code: `QR_${input.nisn || 'existing-nisn'}`,
-        user_id: input.user_id || null,
-        is_active: input.is_active ?? true,
-        created_at: new Date(),
-        updated_at: new Date()
-    });
+  try {
+    // Check if student exists
+    const existingStudent = await db.select()
+      .from(studentsTable)
+      .where(eq(studentsTable.id, input.id))
+      .execute();
+
+    if (existingStudent.length === 0) {
+      throw new Error('Student not found');
+    }
+
+    // If NISN is being updated, check for uniqueness
+    if (input.nisn && input.nisn !== existingStudent[0].nisn) {
+      const nisnExists = await db.select()
+        .from(studentsTable)
+        .where(and(
+          eq(studentsTable.nisn, input.nisn),
+          eq(studentsTable.id, input.id)
+        ))
+        .execute();
+
+      if (nisnExists.length > 0) {
+        throw new Error('Student with this NISN already exists');
+      }
+    }
+
+    // If user_id is provided, verify the user exists
+    if (input.user_id !== undefined && input.user_id !== null) {
+      const user = await db.select()
+        .from(usersTable)
+        .where(eq(usersTable.id, input.user_id))
+        .execute();
+
+      if (user.length === 0) {
+        throw new Error('Referenced user does not exist');
+      }
+    }
+
+    // Prepare update values
+    const updateValues: any = {
+      updated_at: new Date()
+    };
+
+    if (input.nisn !== undefined) {
+      updateValues.nisn = input.nisn;
+      // Regenerate QR code if NISN changed
+      if (input.nisn !== existingStudent[0].nisn) {
+        updateValues.qr_code = generateQrCode(input.nisn);
+      }
+    }
+
+    if (input.name !== undefined) updateValues.name = input.name;
+    if (input.class !== undefined) updateValues.class = input.class;
+    if (input.user_id !== undefined) updateValues.user_id = input.user_id;
+    if (input.is_active !== undefined) updateValues.is_active = input.is_active;
+
+    // Update student record
+    const result = await db.update(studentsTable)
+      .set(updateValues)
+      .where(eq(studentsTable.id, input.id))
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Student update failed:', error);
+    throw error;
+  }
 }
 
 export async function getStudents(): Promise<Student[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch all active students from database.
-    // Should return list of students with proper filtering and pagination.
-    return Promise.resolve([]);
+  try {
+    const results = await db.select()
+      .from(studentsTable)
+      .where(eq(studentsTable.is_active, true))
+      .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Get students failed:', error);
+    throw error;
+  }
 }
 
 export async function getStudentById(id: number): Promise<Student | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch a single student by ID.
-    // Should return student if found, null otherwise.
-    return Promise.resolve(null);
+  try {
+    const results = await db.select()
+      .from(studentsTable)
+      .where(eq(studentsTable.id, id))
+      .execute();
+
+    return results.length > 0 ? results[0] : null;
+  } catch (error) {
+    console.error('Get student by ID failed:', error);
+    throw error;
+  }
 }
 
 export async function getStudentByNisn(nisn: string): Promise<Student | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch a single student by NISN.
-    // Should return student if found, null otherwise.
-    return Promise.resolve(null);
+  try {
+    const results = await db.select()
+      .from(studentsTable)
+      .where(eq(studentsTable.nisn, nisn))
+      .execute();
+
+    return results.length > 0 ? results[0] : null;
+  } catch (error) {
+    console.error('Get student by NISN failed:', error);
+    throw error;
+  }
 }
 
 export async function getStudentByQrCode(qrCode: string): Promise<Student | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch a single student by QR code for attendance scanning.
-    // Should return student if found, null otherwise.
-    return Promise.resolve(null);
+  try {
+    const results = await db.select()
+      .from(studentsTable)
+      .where(eq(studentsTable.qr_code, qrCode))
+      .execute();
+
+    return results.length > 0 ? results[0] : null;
+  } catch (error) {
+    console.error('Get student by QR code failed:', error);
+    throw error;
+  }
 }
 
 export async function deleteStudent(id: number): Promise<boolean> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to soft delete a student (set is_active to false).
-    // Should check student exists and update is_active flag.
-    return Promise.resolve(true);
+  try {
+    // Check if student exists
+    const existingStudent = await db.select()
+      .from(studentsTable)
+      .where(eq(studentsTable.id, id))
+      .execute();
+
+    if (existingStudent.length === 0) {
+      return false;
+    }
+
+    // Soft delete by setting is_active to false
+    await db.update(studentsTable)
+      .set({ 
+        is_active: false,
+        updated_at: new Date()
+      })
+      .where(eq(studentsTable.id, id))
+      .execute();
+
+    return true;
+  } catch (error) {
+    console.error('Delete student failed:', error);
+    throw error;
+  }
 }
 
 export async function importStudentsFromCsv(csvData: any[]): Promise<CsvImportResult> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to import students from CSV data with validation.
-    // Should validate each row, generate QR codes, and return detailed import results.
-    return Promise.resolve({
-        total: csvData.length,
-        success: 0,
-        failed: csvData.length,
-        errors: csvData.map((row, index) => ({
-            row: index + 1,
-            reason: 'Not implemented',
-            data: row
-        }))
-    });
+  const result: CsvImportResult = {
+    total: csvData.length,
+    success: 0,
+    failed: 0,
+    errors: []
+  };
+
+  for (let i = 0; i < csvData.length; i++) {
+    const row = csvData[i];
+    const rowNumber = i + 1;
+
+    try {
+      // Validate required fields
+      if (!row.nisn || !row.name || !row.class) {
+        result.failed++;
+        result.errors.push({
+          row: rowNumber,
+          reason: 'Missing required fields (nisn, name, class)',
+          data: row
+        });
+        continue;
+      }
+
+      // Check if NISN already exists
+      const existingStudent = await db.select()
+        .from(studentsTable)
+        .where(eq(studentsTable.nisn, row.nisn))
+        .execute();
+
+      if (existingStudent.length > 0) {
+        result.failed++;
+        result.errors.push({
+          row: rowNumber,
+          reason: 'Student with this NISN already exists',
+          data: row
+        });
+        continue;
+      }
+
+      // Create student
+      await createStudent({
+        nisn: row.nisn,
+        name: row.name,
+        class: row.class,
+        user_id: row.user_id || null
+      });
+
+      result.success++;
+    } catch (error) {
+      result.failed++;
+      result.errors.push({
+        row: rowNumber,
+        reason: error instanceof Error ? error.message : 'Unknown error',
+        data: row
+      });
+    }
+  }
+
+  return result;
 }
 
 export async function getStudentsByClass(className: string): Promise<Student[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch all students in a specific class.
-    // Should return filtered list of students by class name.
-    return Promise.resolve([]);
+  try {
+    const results = await db.select()
+      .from(studentsTable)
+      .where(and(
+        eq(studentsTable.class, className),
+        eq(studentsTable.is_active, true)
+      ))
+      .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Get students by class failed:', error);
+    throw error;
+  }
 }

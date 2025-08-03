@@ -1,55 +1,99 @@
 
+import { db } from '../db';
+import { classSchedulesTable } from '../db/schema';
 import { type CreateClassScheduleInput, type UpdateClassScheduleInput, type ClassSchedule } from '../schema';
+import { eq } from 'drizzle-orm';
 
 export async function createClassSchedule(input: CreateClassScheduleInput): Promise<ClassSchedule> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to create a new class schedule configuration.
-    // Should check class name uniqueness and persist to database.
-    return Promise.resolve({
-        id: 1,
+  try {
+    const result = await db.insert(classSchedulesTable)
+      .values({
         class_name: input.class_name,
         check_in_time: input.check_in_time,
         late_tolerance_minutes: input.late_tolerance_minutes,
-        min_checkout_time: input.min_checkout_time,
-        is_active: true,
-        created_at: new Date(),
-        updated_at: new Date()
-    });
+        min_checkout_time: input.min_checkout_time
+      })
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Class schedule creation failed:', error);
+    throw error;
+  }
 }
 
 export async function updateClassSchedule(input: UpdateClassScheduleInput): Promise<ClassSchedule> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to update existing class schedule configuration.
-    // Should validate schedule exists and update database.
-    return Promise.resolve({
-        id: input.id,
-        class_name: input.class_name || 'Class A',
-        check_in_time: input.check_in_time || '07:00',
-        late_tolerance_minutes: input.late_tolerance_minutes ?? 15,
-        min_checkout_time: input.min_checkout_time || '14:00',
-        is_active: input.is_active ?? true,
-        created_at: new Date(),
-        updated_at: new Date()
-    });
+  try {
+    const updateData: any = {};
+    
+    if (input.class_name !== undefined) updateData.class_name = input.class_name;
+    if (input.check_in_time !== undefined) updateData.check_in_time = input.check_in_time;
+    if (input.late_tolerance_minutes !== undefined) updateData.late_tolerance_minutes = input.late_tolerance_minutes;
+    if (input.min_checkout_time !== undefined) updateData.min_checkout_time = input.min_checkout_time;
+    if (input.is_active !== undefined) updateData.is_active = input.is_active;
+
+    updateData.updated_at = new Date();
+
+    const result = await db.update(classSchedulesTable)
+      .set(updateData)
+      .where(eq(classSchedulesTable.id, input.id))
+      .returning()
+      .execute();
+
+    if (result.length === 0) {
+      throw new Error('Class schedule not found');
+    }
+
+    return result[0];
+  } catch (error) {
+    console.error('Class schedule update failed:', error);
+    throw error;
+  }
 }
 
 export async function getClassSchedules(): Promise<ClassSchedule[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch all active class schedules from database.
-    // Should return list of class schedules for configuration management.
-    return Promise.resolve([]);
+  try {
+    const result = await db.select()
+      .from(classSchedulesTable)
+      .where(eq(classSchedulesTable.is_active, true))
+      .execute();
+
+    return result;
+  } catch (error) {
+    console.error('Failed to fetch class schedules:', error);
+    throw error;
+  }
 }
 
 export async function getClassScheduleByClassName(className: string): Promise<ClassSchedule | null> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to fetch schedule configuration for a specific class.
-    // Should return class schedule if found, null otherwise.
-    return Promise.resolve(null);
+  try {
+    const result = await db.select()
+      .from(classSchedulesTable)
+      .where(eq(classSchedulesTable.class_name, className))
+      .execute();
+
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('Failed to fetch class schedule by name:', error);
+    throw error;
+  }
 }
 
 export async function deleteClassSchedule(id: number): Promise<boolean> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to soft delete a class schedule (set is_active to false).
-    // Should check schedule exists and update is_active flag.
-    return Promise.resolve(true);
+  try {
+    const result = await db.update(classSchedulesTable)
+      .set({ 
+        is_active: false,
+        updated_at: new Date()
+      })
+      .where(eq(classSchedulesTable.id, id))
+      .returning()
+      .execute();
+
+    return result.length > 0;
+  } catch (error) {
+    console.error('Class schedule deletion failed:', error);
+    throw error;
+  }
 }
