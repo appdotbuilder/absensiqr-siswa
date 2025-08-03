@@ -1,10 +1,9 @@
-
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { resetDB, createDB } from '../helpers';
 import { db } from '../db';
 import { usersTable } from '../db/schema';
 import { type LoginInput } from '../schema';
-import { login, validateToken, hashPassword } from '../handlers/auth';
+import { login, validateToken, hashPassword, verifyPassword, initializeDefaultAdmin } from '../handlers/auth';
 import { eq } from 'drizzle-orm';
 
 // Test user data
@@ -25,9 +24,106 @@ describe('auth handlers', () => {
   beforeEach(createDB);
   afterEach(resetDB);
 
+  describe('password hashing', () => {
+    it('should hash passwords using Bun.password.hash', async () => {
+      const password = 'testpassword123';
+      const hashedPassword = await hashPassword(password);
+
+      expect(hashedPassword).toBeDefined();
+      expect(typeof hashedPassword).toBe('string');
+      expect(hashedPassword).not.toEqual(password);
+      expect(hashedPassword.length).toBeGreaterThan(50); // Bun's hash is longer than bcrypt
+    });
+
+    it('should verify passwords correctly', async () => {
+      const password = 'testpassword123';
+      const hashedPassword = await hashPassword(password);
+
+      const isValid = await verifyPassword(password, hashedPassword);
+      const isInvalid = await verifyPassword('wrongpassword', hashedPassword);
+
+      expect(isValid).toBe(true);
+      expect(isInvalid).toBe(false);
+    });
+
+    it('should handle empty passwords by throwing error', async () => {
+      const emptyPassword = '';
+      
+      // Bun.password.hash does not allow empty passwords
+      await expect(hashPassword(emptyPassword)).rejects.toThrow();
+    });
+
+    it('should produce different hashes for same password', async () => {
+      const password = 'samepassword';
+      const hash1 = await hashPassword(password);
+      const hash2 = await hashPassword(password);
+
+      expect(hash1).not.toEqual(hash2);
+      expect(await verifyPassword(password, hash1)).toBe(true);
+      expect(await verifyPassword(password, hash2)).toBe(true);
+    });
+  });
+
+  describe('initializeDefaultAdmin', () => {
+    it('should create default admin account when none exists', async () => {
+      await initializeDefaultAdmin();
+
+      const admins = await db.select()
+        .from(usersTable)
+        .where(eq(usersTable.username, 'admin'))
+        .execute();
+
+      expect(admins).toHaveLength(1);
+      expect(admins[0].username).toBe('admin');
+      expect(admins[0].role).toBe('admin');
+      expect(admins[0].full_name).toBe('Administrator');
+      expect(admins[0].email).toBe('admin@smpitadifathi.sch.id');
+      expect(admins[0].is_active).toBe(true);
+
+      // Test that password is properly hashed and verifiable
+      const isValidPassword = await verifyPassword('adifathi2020', admins[0].password_hash);
+      expect(isValidPassword).toBe(true);
+    });
+
+    it('should update existing admin account password', async () => {
+      // Create existing admin with different password
+      const oldPasswordHash = await hashPassword('oldpassword');
+      await db.insert(usersTable)
+        .values({
+          username: 'admin',
+          password_hash: oldPasswordHash,
+          role: 'admin',
+          full_name: 'Old Admin',
+          email: 'old@example.com',
+          is_active: false
+        })
+        .execute();
+
+      // Initialize default admin
+      await initializeDefaultAdmin();
+
+      const admins = await db.select()
+        .from(usersTable)
+        .where(eq(usersTable.username, 'admin'))
+        .execute();
+
+      expect(admins).toHaveLength(1);
+      expect(admins[0].is_active).toBe(true);
+      expect(admins[0].password_hash).not.toBe(oldPasswordHash);
+
+      // Test new password works
+      const isValidNewPassword = await verifyPassword('adifathi2020', admins[0].password_hash);
+      expect(isValidNewPassword).toBe(true);
+
+      // Test old password doesn't work
+      const isValidOldPassword = await verifyPassword('oldpassword', admins[0].password_hash);
+      expect(isValidOldPassword).toBe(false);
+    });
+  });
+
   describe('login', () => {
     beforeEach(async () => {
-      // Create test user
+      // Create test user with properly hashed password
       const hashedPassword = await hashPassword(testUser.password);
       await db.insert(usersTable)
         .values({
@@ -52,6 +148,24 @@ describe('auth handlers', () => {
       expect(result.token).toBeDefined();
       expect(typeof result.token).toBe('string');
       expect(result.user.id).toBeDefined();
+    });
+
+    it('should authenticate default admin account', async () => {
+      // Initialize default admin
+      await initializeDefaultAdmin();
+
+      const adminLoginInput: LoginInput = {
+        username: 'admin',
+        password: 'adifathi2020'
+      };
+
+      const result = await login(adminLoginInput);
+
+      expect(result.user.username).toEqual('admin');
+      expect(result.user.role).toEqual('admin');
+      expect(result.user.full_name).toEqual('Administrator');
+      expect(result.user.is_active).toBe(true);
+      expect(result.token).toBeDefined();
     });
 
     it('should reject invalid username', async () => {
@@ -94,6 +208,31 @@ describe('auth handlers', () => {
       expect(result.user.is_active).toEqual(expect.any(Boolean));
       expect(result.user.created_at).toBeInstanceOf(Date);
       expect(result.user.updated_at).toBeInstanceOf(Date);
+    });
+
+    it('should handle special characters in password', async () => {
+      const specialPassword = 'p@ssw0rd!@#$%^&*()';
+      const hashedPassword = await hashPassword(specialPassword);
+      
+      // Create user with special character password
+      await db.insert(usersTable)
+        .values({
+          username: 'specialuser',
+          password_hash: hashedPassword,
+          role: 'teacher',
+          full_name: 'Special User',
+          email: 'special@example.com',
+          is_active: true
+        })
+        .execute();
+
+      const specialLoginInput: LoginInput = {
+        username: 'specialuser',
+        password: specialPassword
+      };
+
+      const result = await login(specialLoginInput);
+      expect(result.user.username).toEqual('specialuser');
     });
   });
 

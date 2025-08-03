@@ -1,4 +1,3 @@
-
 import { db } from '../db';
 import { usersTable } from '../db/schema';
 import { type LoginInput, type AuthResponse } from '../schema';
@@ -25,9 +24,8 @@ export async function login(input: LoginInput): Promise<AuthResponse> {
       throw new Error('User account is disabled');
     }
 
-    // For this implementation, we'll use a simple password check
-    // In a real application, you would hash the input password and compare with stored hash
-    const isValidPassword = await verifyPassword(input.password, user.password_hash);
+    // Verify password using Bun's password verification
+    const isValidPassword = await Bun.password.verify(input.password, user.password_hash);
     
     if (!isValidPassword) {
       throw new Error('Invalid username or password');
@@ -107,16 +105,68 @@ export async function validateToken(token: string): Promise<{ userId: number; ro
   }
 }
 
-// Simple password verification - in production, use bcrypt
-async function verifyPassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
-  // For demo purposes, we'll just check if the plain password matches the "hash"
-  // In production, use bcrypt.compare(plainPassword, hashedPassword)
-  return plainPassword === hashedPassword;
+// Hash password using Bun's password hashing
+export async function hashPassword(password: string): Promise<string> {
+  if (!password || password.trim() === '') {
+    throw new Error('Password cannot be empty');
+  }
+  return await Bun.password.hash(password);
 }
 
-// Simple password hashing - in production, use bcrypt
-export async function hashPassword(password: string): Promise<string> {
-  // For demo purposes, we'll just return the password as is
-  // In production, use bcrypt.hash(password, saltRounds)
-  return password;
+// Verify password using Bun's password verification
+export async function verifyPassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
+  return await Bun.password.verify(plainPassword, hashedPassword);
+}
+
+// Initialize default admin account
+export async function initializeDefaultAdmin(): Promise<void> {
+  try {
+    const adminUsername = 'admin';
+    const adminPassword = 'adifathi2020';
+
+    // Check if admin already exists
+    const existingAdmins = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.username, adminUsername))
+      .execute();
+
+    if (existingAdmins.length === 0) {
+      // Create new admin account
+      const hashedPassword = await hashPassword(adminPassword);
+      
+      await db.insert(usersTable)
+        .values({
+          username: adminUsername,
+          password_hash: hashedPassword,
+          role: 'admin',
+          full_name: 'Administrator',
+          email: 'admin@smpitadifathi.sch.id',
+          is_active: true
+        })
+        .execute();
+
+      console.log('✅ Default admin account created successfully');
+      console.log(`   Username: ${adminUsername}`);
+      console.log(`   Password: ${adminPassword}`);
+    } else {
+      // Update existing admin password
+      const hashedPassword = await hashPassword(adminPassword);
+      
+      await db.update(usersTable)
+        .set({ 
+          password_hash: hashedPassword,
+          is_active: true,
+          updated_at: new Date()
+        })
+        .where(eq(usersTable.username, adminUsername))
+        .execute();
+
+      console.log('✅ Default admin account updated successfully');
+      console.log(`   Username: ${adminUsername}`);
+      console.log(`   Password: ${adminPassword}`);
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize default admin account:', error);
+    throw error;
+  }
 }

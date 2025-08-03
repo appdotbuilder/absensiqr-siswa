@@ -24,7 +24,7 @@ import {
 } from './schema';
 
 // Import handlers
-import { login, validateToken } from './handlers/auth';
+import { login, validateToken, initializeDefaultAdmin } from './handlers/auth';
 import { createUser, updateUser, getUsers, getUserById, deleteUser } from './handlers/users';
 import { createStudent, updateStudent, getStudents, getStudentById, getStudentByNisn, getStudentByQrCode, deleteStudent, importStudentsFromCsv, getStudentsByClass } from './handlers/students';
 import { createTeacher, updateTeacher, getTeachers, getTeacherById, getTeacherByTeacherId, deleteTeacher, importTeachersFromCsv } from './handlers/teachers';
@@ -203,18 +203,26 @@ const appRouter = router({
 export type AppRouter = typeof appRouter;
 
 async function start() {
-  const port = process.env['SERVER_PORT'] || 2022;
-  const server = createHTTPServer({
-    middleware: (req, res, next) => {
-      cors()(req, res, next);
-    },
-    router: appRouter,
-    createContext() {
-      return {};
-    },
-  });
-  server.listen(port);
-  console.log(`TRPC server listening at port: ${port}`);
+  try {
+    // Initialize default admin account
+    await initializeDefaultAdmin();
+
+    const port = process.env['SERVER_PORT'] || 2022;
+    const server = createHTTPServer({
+      middleware: (req, res, next) => {
+        cors()(req, res, next);
+      },
+      router: appRouter,
+      createContext() {
+        return {};
+      },
+    });
+    server.listen(port);
+    console.log(`🚀 TRPC server listening at port: ${port}`);
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 }
 
 start();

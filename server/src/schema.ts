@@ -86,7 +86,9 @@ export type AttendanceRecord = z.infer<typeof attendanceRecordSchema>;
 // Input schemas for creating/updating entities
 export const createUserInputSchema = z.object({
   username: z.string().min(3),
-  password: z.string().min(6),
+  password: z.string().min(6).refine(val => val.trim().length >= 6, {
+    message: "Password must be at least 6 characters long and not empty"
+  }),
   role: userRoleSchema,
   full_name: z.string().min(1),
   email: z.string().email().nullable()
@@ -97,7 +99,9 @@ export type CreateUserInput = z.infer<typeof createUserInputSchema>;
 export const updateUserInputSchema = z.object({
   id: z.number(),
   username: z.string().min(3).optional(),
-  password: z.string().min(6).optional(),
+  password: z.string().min(6).refine(val => !val || val.trim().length >= 6, {
+    message: "Password must be at least 6 characters long and not empty"
+  }).optional(),
   role: userRoleSchema.optional(),
   full_name: z.string().min(1).optional(),
   email: z.string().email().nullable().optional(),
@@ -191,7 +195,9 @@ export type UpdateAttendanceInput = z.infer<typeof updateAttendanceInputSchema>;
 // Authentication schemas
 export const loginInputSchema = z.object({
   username: z.string().min(1),
-  password: z.string().min(1)
+  password: z.string().min(1).refine(val => val.trim().length > 0, {
+    message: "Password cannot be empty"
+  })
 });
 
 export type LoginInput = z.infer<typeof loginInputSchema>;
