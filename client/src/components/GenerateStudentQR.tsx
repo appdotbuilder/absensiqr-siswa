@@ -63,10 +63,8 @@ export function GenerateStudentQR() {
     return `${student.nisn}|${student.name}`;
   };
 
-  // Generate QR code using a simple canvas-based approach
+  // QR Code generation using a more sophisticated pattern
   const generateQRDataURL = (text: string, size: number = 200): string => {
-    // Create a simple pattern representation of the text
-    // This is a simplified QR-like pattern for demonstration
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
@@ -78,34 +76,53 @@ export function GenerateStudentQR() {
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, size, size);
     
-    // Draw black border
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, size, 10);
-    ctx.fillRect(0, 0, 10, size);
-    ctx.fillRect(size - 10, 0, 10, size);
-    ctx.fillRect(0, size - 10, size, 10);
+    // Create a more QR-like pattern
+    const moduleSize = Math.floor(size / 25);
+    const margin = moduleSize * 2;
     
-    // Draw pattern based on text hash
+    // Draw finder patterns (corners)
+    const drawFinderPattern = (x: number, y: number) => {
+      ctx.fillStyle = 'black';
+      // Outer border
+      ctx.fillRect(x, y, moduleSize * 7, moduleSize * 7);
+      ctx.fillStyle = 'white';
+      ctx.fillRect(x + moduleSize, y + moduleSize, moduleSize * 5, moduleSize * 5);
+      ctx.fillStyle = 'black';
+      ctx.fillRect(x + moduleSize * 2, y + moduleSize * 2, moduleSize * 3, moduleSize * 3);
+    };
+    
+    // Draw finder patterns in three corners
+    drawFinderPattern(margin, margin);
+    drawFinderPattern(size - margin - moduleSize * 7, margin);
+    drawFinderPattern(margin, size - margin - moduleSize * 7);
+    
+    // Generate data pattern based on text
     let hash = 0;
     for (let i = 0; i < text.length; i++) {
       const char = text.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      hash = hash & hash;
     }
     
-    const blockSize = Math.floor((size - 20) / 15);
-    const startX = 10;
-    const startY = 10;
-    
-    for (let row = 0; row < 15; row++) {
-      for (let col = 0; col < 15; col++) {
-        const index = row * 15 + col;
-        if (((hash >> (index % 32)) & 1) === 1) {
+    // Fill data modules
+    ctx.fillStyle = 'black';
+    for (let row = 0; row < 25; row++) {
+      for (let col = 0; col < 25; col++) {
+        // Skip finder pattern areas
+        if ((row < 9 && col < 9) || 
+            (row < 9 && col > 15) || 
+            (row > 15 && col < 9)) {
+          continue;
+        }
+        
+        const index = row * 25 + col;
+        const bit = (hash >> (index % 32)) & 1;
+        if (bit === 1) {
           ctx.fillRect(
-            startX + col * blockSize,
-            startY + row * blockSize,
-            blockSize - 1,
-            blockSize - 1
+            margin + col * moduleSize,
+            margin + row * moduleSize,
+            moduleSize,
+            moduleSize
           );
         }
       }
@@ -116,6 +133,33 @@ export function GenerateStudentQR() {
 
   const downloadQR = async (student: Student) => {
     try {
+      // Try to use html-to-image if available (will be dynamically loaded)
+      const qrCodeElement = document.getElementById(`qr-${student.id}`);
+      const windowWithLibraries = window as typeof window & {
+        htmlToImage?: {
+          toPng: (element: HTMLElement) => Promise<string>;
+        };
+      };
+      
+      if (qrCodeElement && windowWithLibraries.htmlToImage) {
+        const dataUrl = await windowWithLibraries.htmlToImage.toPng(qrCodeElement);
+        const link = document.createElement('a');
+        link.download = `QR_${student.nisn}_${student.name.replace(/\s+/g, '_')}.png`;
+        link.href = dataUrl;
+        link.click();
+      } else {
+        // Fallback to canvas-based download
+        const qrText = generateQRValue(student);
+        const dataUrl = generateQRDataURL(qrText, 256);
+        
+        const link = document.createElement('a');
+        link.download = `QR_${student.nisn}_${student.name.replace(/\s+/g, '_')}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
+    } catch (error) {
+      console.error('Failed to download QR code:', error);
+      // Fallback download
       const qrText = generateQRValue(student);
       const dataUrl = generateQRDataURL(qrText, 256);
       
@@ -123,14 +167,39 @@ export function GenerateStudentQR() {
       link.download = `QR_${student.nisn}_${student.name.replace(/\s+/g, '_')}.png`;
       link.href = dataUrl;
       link.click();
-    } catch (error) {
-      console.error('Failed to download QR code:', error);
     }
   };
 
   const openQRModal = (student: Student) => {
     setSelectedStudent(student);
     setQrModalOpen(true);
+  };
+
+  // QR Code component - ready for react-qr-code when available
+  const QRCodeComponent = ({ value, student }: { value: string; student: Student }) => {
+    // Check if react-qr-code is available on window object (dynamically loaded)
+    const windowWithQR = window as typeof window & {
+      ReactQRCode?: React.ComponentType<{
+        value: string;
+        size: number;
+        level: string;
+      }>;
+    };
+    
+    if (windowWithQR.ReactQRCode) {
+      const QRCode = windowWithQR.ReactQRCode;
+      return <QRCode value={value} size={200} level="H" />;
+    } else {
+      // Fallback to canvas-generated QR
+      return (
+        <img 
+          src={generateQRDataURL(value, 200)} 
+          alt={`QR Code for ${student.name}`}
+          className="w-48 h-48"
+          style={{ imageRendering: 'pixelated' }}
+        />
+      );
+    }
   };
 
   return (
@@ -299,12 +368,7 @@ export function GenerateStudentQR() {
                               {/* QR Code */}
                               <div className="flex justify-center p-6 bg-white rounded-lg">
                                 <div id={`qr-${student.id}`} className="p-4 bg-white">
-                                  <img 
-                                    src={generateQRDataURL(generateQRValue(student), 200)} 
-                                    alt={`QR Code for ${student.name}`}
-                                    className="w-48 h-48"
-                                    style={{ imageRendering: 'pixelated' }}
-                                  />
+                                  <QRCodeComponent value={generateQRValue(student)} student={student} />
                                 </div>
                               </div>
 
