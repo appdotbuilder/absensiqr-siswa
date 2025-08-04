@@ -12,6 +12,7 @@ import { AttendanceRecords } from '@/components/AttendanceRecords';
 import { QRScanner } from '@/components/QRScanner';
 import { ClassScheduleManagement } from '@/components/ClassScheduleManagement';
 import { Reports } from '@/components/Reports';
+import { GenerateStudentQR } from '@/components/GenerateStudentQR';
 import { 
   LogOut, 
   Users, 
@@ -70,6 +71,7 @@ function App() {
     { id: 'dashboard', label: '📊 Dashboard', icon: Calendar, roles: ['admin', 'teacher', 'student'] },
     { id: 'qr-scanner', label: '📱 Scan QR', icon: QrCode, roles: ['admin', 'teacher'] },
     { id: 'attendance', label: '📋 Attendance', icon: UserCheck, roles: ['admin', 'teacher'] },
+    { id: 'generate-qr', label: '🎯 Generate QR Siswa', icon: QrCode, roles: ['admin', 'teacher'] },
     { id: 'students', label: '👥 Students', icon: Users, roles: ['admin'] },
     { id: 'teachers', label: '🎓 Teachers', icon: GraduationCap, roles: ['admin'] },
     { id: 'schedules', label: '⏰ Schedules', icon: Settings, roles: ['admin'] },
@@ -203,6 +205,7 @@ function App() {
               {activeTab === 'dashboard' && <Dashboard currentUser={currentUser} />}
               {activeTab === 'qr-scanner' && <QRScanner currentUser={currentUser} />}
               {activeTab === 'attendance' && <AttendanceRecords currentUser={currentUser} />}
+              {activeTab === 'generate-qr' && <GenerateStudentQR />}
               {activeTab === 'students' && <StudentManagement />}
               {activeTab === 'teachers' && <TeacherManagement />}
               {activeTab === 'schedules' && <ClassScheduleManagement />}
