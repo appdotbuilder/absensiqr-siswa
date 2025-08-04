@@ -46,7 +46,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
         </div>
         <div>
           <CardTitle className="text-2xl font-bold text-white">
-            Welcome Back! 👋
+            SMP IT Adifathi
           </CardTitle>
           <CardDescription className="text-white/80 mt-2">
             Sign in to AbsensiQR Siswa
@@ -126,10 +126,9 @@ export function LoginForm({ onLogin }: LoginFormProps) {
           </Button>
         </form>
         
-        <div className="text-center text-white/60 text-sm">
-          <p>Demo Credentials:</p>
-          <p className="mt-1">Username: admin | Password: admin123</p>
-        </div>
+        <p className="text-center text-white/60 text-sm">
+          Aplikasi AbsensiQR Siswa v1.0.0 © 2024 by SMP IT Adifathi Team
+        </p>
       </CardContent>
     </Card>
   );
